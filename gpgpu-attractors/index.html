@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPGPU Attractors</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+        }
+        #ui-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+            background: rgba(20,20,20,0.7);
+            color: #fff;
+            font-family: monospace;
+            padding: 14px 18px;
+            border-radius: 8px;
+            font-size: 15px;
+        }
+        #application-canvas {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+        .slider-container {
+            margin: 8px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 4px;
+        }
+        input[type="range"] {
+            width: 200px;
+        }
+        .value-display {
+            display: inline-block;
+            min-width: 40px;
+            text-align: right;
+        }
+        #terminal-panel {
+            position: fixed;
+            left: 20px;
+            bottom: 20px;
+            width: 420px;
+            height: 110px;
+            z-index: 20;
+            background: rgba(20,20,20,0.7);
+            color: #fff;
+            font-family: monospace;
+            font-size: 15px;
+            padding: 16px 22px 16px 22px;
+            border-radius: 10px;
+            border: 1.5px solid rgba(51,51,51,0.5);
+            box-sizing: border-box;
+            pointer-events: none;
+            letter-spacing: 0.5px;
+            opacity: 0.97;
+            white-space: pre-line;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+        }
+        #title {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 30;
+            color: #fff;
+            font-family: monospace;
+            font-size: 16px;
+            text-align: left;
+            line-height: 1.4;
+            letter-spacing: 1px;
+            text-shadow: 0 0 10px rgba(255,255,255,0.3);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="title">
+        INTERSPECIFICS<br>
+        SONIC MACHINES /<br>
+        STRANGE ATTRACTORS _
+    </div>
+    <div id="ui-panel">
+        <b>GPGPU Attractors</b><br>
+        <div class="slider-container">
+            <label>Attractor Type
+                <select id="attractorType">
+                    <option value="lorenz">Lorenz</option>
+                    <option value="thomas">Thomas</option>
+                    <option value="halvorsen">Halvorsen</option>
+                    <option value="dadras">Dadras</option>
+                </select>
+            </label>
+        </div>
+        <div class="slider-container">
+            <label>σ (sigma)
+                <input id="sigma" type="range" min="0" max="30" step="0.1" value="10">
+                <span id="sigmaValue" class="value-display">10</span>
+            </label>
+        </div>
+        <div class="slider-container">
+            <label>ρ (rho)
+                <input id="rho" type="range" min="0" max="50" step="0.1" value="28">
+                <span id="rhoValue" class="value-display">28</span>
+            </label>
+        </div>
+        <div class="slider-container">
+            <label>β (beta)
+                <input id="beta" type="range" min="0" max="10" step="0.01" value="2.67">
+                <span id="betaValue" class="value-display">2.67</span>
+            </label>
+        </div>
+        <div class="slider-container">
+            <label>Particles
+                <input id="numParticles" type="range" min="1000" max="10000" step="1000" value="5000">
+                <span id="numParticlesValue" class="value-display">5000</span>
+            </label>
+        </div>
+        <div class="slider-container">
+            <label>Trail Length
+                <input id="trailLength" type="range" min="10" max="100" step="1" value="50">
+                <span id="trailLengthValue" class="value-display">50</span>
+            </label>
+        </div>
+        <div class="slider-container">
+            <button id="resetBtn" style="width: 100%; background: #222; color: #fff; border: 1px solid #444; border-radius: 5px; padding: 8px 0; font-family: monospace; font-size: 15px; cursor: pointer;">Reset</button>
+        </div>
+    </div>
+    <div id="terminal-panel"></div>
+    <canvas id="application-canvas"></canvas>
+    <script type="module" src="/src/index.js"></script>
+</body>
+</html> 
