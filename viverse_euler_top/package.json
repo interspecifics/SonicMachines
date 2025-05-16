@@ -1,0 +1,16 @@
+{
+  "name": "viverse-eucler",
+  "version": "1.0.0",
+  "description": "PlayCanvas/WebGL reimplementation of Three.js buffergeometry drawrange demo.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "lil-gui": "^0.19.1",
+    "playcanvas": "1.74.0",
+    "tone": "^15.1.22",
+    "vite": "^5.1.4"
+  }
+}
