@@ -6,6 +6,26 @@ export class AudioManager {
         this.attractorType = 0; // default
         this.isTransitioning = false;
         
+        // Add root note and octave properties
+        this.rootNote = 'C';
+        this.octave = 4;
+        
+        // Note to frequency mapping
+        this.noteFrequencies = {
+            'C': 261.63,  // C4
+            'C#': 277.18,
+            'D': 293.66,
+            'D#': 311.13,
+            'E': 329.63,
+            'F': 349.23,
+            'F#': 369.99,
+            'G': 392.00,
+            'G#': 415.30,
+            'A': 440.00,
+            'A#': 466.16,
+            'B': 493.88
+        };
+        
         // Simplified stability parameters
         this.stabilityParams = {
             smoothingFactor: 0.8,    // Less smoothing for more direct response
@@ -80,7 +100,9 @@ export class AudioManager {
         try {
             // Create two voices instead of three for simpler, clearer sound
             this.voices = [];
-            const baseFreqs = [55, 82.5]; // Fifth interval for harmonic relationship
+            const baseFreq = this.noteFrequencies[this.rootNote] * Math.pow(2, this.octave - 4);
+            const fifthFreq = baseFreq * 1.5; // Perfect fifth interval
+            const baseFreqs = [baseFreq, fifthFreq];
             const types = ['sine', 'sine']; // Both sine waves for cleaner sound
             
             // === Add master gain and limiter ===
@@ -193,6 +215,10 @@ export class AudioManager {
             const attractorType = ['lorenz', 'rossler', 'thomas', 'halvorsen', 'dadras', 'aizawa'][this.attractorType];
             const scaling = this.getAttractorScaling(attractorType);
 
+            // Calculate base frequency from root note and octave
+            const baseFreq = this.noteFrequencies[this.rootNote] * Math.pow(2, this.octave - 4);
+            const fifthFreq = baseFreq * 1.5; // Perfect fifth interval
+
             // === Ensure noise is stopped for non-Thomas attractors ===
             if (attractorType !== 'thomas' && this.noise) {
                 if (this.noise.state === 'started') {
@@ -220,86 +246,86 @@ export class AudioManager {
 
                 // === Noise voice modulation ===
                 const noiseActivity = Math.min(1, (dispersion * 1.5) + (centralDeviation * 0.5));
-                this.noiseGain.gain.rampTo(noiseActivity * 0.18, this.stabilityParams.transitionTime); // up to 0.18 gain
-                this.noiseFilter.frequency.rampTo(1000 + dispersion * 2000, this.stabilityParams.transitionTime);
-                // Always start noise for Thomas, let gain control output
+                this.noiseGain.gain.rampTo(noiseActivity * 0.18, this.stabilityParams.transitionTime);
+                // Scale noise filter frequency based on root note
+                const noiseFreq = baseFreq * 4 + dispersion * baseFreq * 8;
+                this.noiseFilter.frequency.rampTo(noiseFreq, this.stabilityParams.transitionTime);
+                
                 if (this.noise && this.noise.state !== 'started') {
                     this.noise.start();
                 }
 
                 this.voices.forEach((voice, i) => {
-                    // Enhanced frequency modulation based on dispersion
-                    const baseFreq = [40, 60][i];
-                    const dispersionFactor = Math.pow(dispersion, 1.5); // Amplify dispersion effect
-                    const centralFactor = Math.pow(centralDeviation, 2); // Amplify central deviation
+                    // Use root note-based frequencies
+                    const voiceBaseFreq = i === 0 ? baseFreq : fifthFreq;
+                    const dispersionFactor = Math.pow(dispersion, 1.5);
+                    const centralFactor = Math.pow(centralDeviation, 2);
                     
-                    // More dramatic frequency changes when dispersed
+                    // Scale frequency modulation based on root note
                     const freqMod = this.clamp(
-                        baseFreq * (
+                        voiceBaseFreq * (
                             1 + 
                             (symmetry * 0.8) + 
                             (density * 0.4) +
-                            (dispersionFactor * 1.2) + // Add dispersion influence
-                            (centralFactor * 0.8) +    // Add central deviation influence
-                            (Math.sin(rotation * 2) * 0.3) // Add some cyclic variation
+                            (dispersionFactor * 1.2) +
+                            (centralFactor * 0.8) +
+                            (Math.sin(rotation * 2) * 0.3)
                         ),
                         this.stabilityParams.minFrequency,
                         this.stabilityParams.maxFrequency
                     );
                     voice.osc.frequency.rampTo(freqMod, this.stabilityParams.transitionTime);
 
-                    // Filter modulation with enhanced dispersion response
+                    // Scale filter frequency based on root note
                     const filterFreq = this.clamp(
-                        400 + (i * 200) + 
-                        (spread * 1200) + 
-                        (Math.abs(rotation) * 800) +
-                        (dispersionFactor * 1000) + // Add dispersion influence
-                        (centralFactor * 600),      // Add central deviation influence
+                        baseFreq * 3 + (i * baseFreq) + 
+                        (spread * baseFreq * 4) + 
+                        (Math.abs(rotation) * baseFreq * 2) +
+                        (dispersionFactor * baseFreq * 3) +
+                        (centralFactor * baseFreq * 1.5),
                         this.stabilityParams.minFilterFreq,
                         this.stabilityParams.maxFilterFreq
                     );
                     voice.filter.frequency.rampTo(filterFreq, this.stabilityParams.transitionTime);
 
-                    // Modulation index changes with dispersion
+                    // Rest of the Thomas attractor modulation remains the same
                     const modIndex = this.clamp(
                         1 + (i * 0.5) + 
                         (density * 2) + 
                         (speed * 0.5) +
-                        (dispersionFactor * 1.5) + // Add dispersion influence
-                        (centralFactor * 0.8),     // Add central deviation influence
+                        (dispersionFactor * 1.5) +
+                        (centralFactor * 0.8),
                         0.1,
                         5
                     );
                     voice.osc.modulationIndex.rampTo(modIndex, this.stabilityParams.transitionTime);
 
-                    // Gain modulation with dispersion influence
                     const gainValue = this.clamp(
                         0.15 + 
                         (symmetry * 0.2) + 
                         (spread * 0.1) +
-                        (dispersionFactor * 0.15) + // Add dispersion influence
-                        (centralFactor * 0.1),      // Add central deviation influence
+                        (dispersionFactor * 0.15) +
+                        (centralFactor * 0.1),
                         this.stabilityParams.minGain,
                         this.stabilityParams.maxGain
                     );
                     voice.gain.gain.rampTo(gainValue, this.stabilityParams.transitionTime);
 
-                    // Enhanced stereo panning based on dispersion
                     const panValue = this.clamp(
                         Math.sin(rotation) * 0.7 + 
-                        (dispersionFactor * 0.3) * Math.sin(rotation * 2), // Add dispersion influence
+                        (dispersionFactor * 0.3) * Math.sin(rotation * 2),
                         -0.5,
                         0.5
                     );
                     voice.panner.pan.rampTo(panValue, this.stabilityParams.transitionTime);
                 });
 
-                // Enhanced effects with dispersion influence
+                // Effects remain the same
                 const reverbWet = this.clamp(
                     0.2 + 
                     (symmetry * 0.3) + 
                     (density * 0.2) +
-                    (dispersionFactor * 0.2), // Add dispersion influence
+                    (dispersionFactor * 0.2),
                     0.1,
                     0.6
                 );
@@ -309,43 +335,46 @@ export class AudioManager {
                     0.2 + 
                     (density * 0.3) + 
                     (spread * 0.2) +
-                    (dispersionFactor * 0.15), // Add dispersion influence
+                    (dispersionFactor * 0.15),
                     0.1,
                     0.5
                 );
                 this.delay.feedback.rampTo(delayFeedback, this.stabilityParams.transitionTime);
 
-                // Dynamic delay time with dispersion influence
                 const delayTime = this.clamp(
                     0.2 + 
                     (Math.abs(rotation) * 0.3) +
-                    (dispersionFactor * 0.2), // Add dispersion influence
+                    (dispersionFactor * 0.2),
                     0.1,
                     0.5
                 );
                 this.delay.delayTime.rampTo(delayTime, this.stabilityParams.transitionTime);
 
             } else {
-                // Original mapping for other attractors
+                // Original mapping for other attractors, now scaled by root note
                 this.voices.forEach((voice, i) => {
-                    // Frequency modulation with enhanced sensitivity
-                    const baseFreq = [55, 82.5][i];
+                    // Use root note-based frequencies
+                    const voiceBaseFreq = i === 0 ? baseFreq : fifthFreq;
+                    
+                    // Scale frequency modulation based on root note
                     const freqMod = this.clamp(
-                        baseFreq * (1 + (speed * 0.4 * scaling.speedScale) + (Math.abs(avgPos.z) * 0.2)),
+                        voiceBaseFreq * (1 + (speed * 0.4 * scaling.speedScale) + (Math.abs(avgPos.z) * 0.2)),
                         this.stabilityParams.minFrequency,
                         this.stabilityParams.maxFrequency
                     );
                     voice.osc.frequency.rampTo(freqMod, this.stabilityParams.transitionTime);
 
-                    // Filter modulation with enhanced spread sensitivity
+                    // Scale filter frequency based on root note
                     const filterFreq = this.clamp(
-                        800 + (i * 400) + (spread * 800 * scaling.spreadScale) + (Math.abs(avgPos.y) * 300),
+                        baseFreq * 3 + (i * baseFreq) + 
+                        (spread * baseFreq * 2 * scaling.spreadScale) + 
+                        (Math.abs(avgPos.y) * baseFreq),
                         this.stabilityParams.minFilterFreq,
                         this.stabilityParams.maxFilterFreq
                     );
                     voice.filter.frequency.rampTo(filterFreq, this.stabilityParams.transitionTime);
 
-                    // Modulation index for timbre changes
+                    // Rest of the modulation remains the same
                     const modIndex = this.clamp(
                         1 + (i * 0.5) + (Math.abs(avgPos.x) * scaling.modScale) + (speed * 0.3),
                         this.stabilityParams.minModIndex || 0.1,
@@ -353,7 +382,6 @@ export class AudioManager {
                     );
                     voice.osc.modulationIndex.rampTo(modIndex, this.stabilityParams.transitionTime);
 
-                    // Gain modulation with enhanced position sensitivity
                     const gainValue = this.clamp(
                         0.15 + (Math.abs(avgPos.y) * 0.15 * scaling.gainScale) + (speed * 0.1),
                         this.stabilityParams.minGain,
@@ -361,12 +389,11 @@ export class AudioManager {
                     );
                     voice.gain.gain.rampTo(gainValue, this.stabilityParams.transitionTime);
 
-                    // Stereo panning with enhanced position sensitivity
                     const panValue = this.clamp(avgPos.x * 0.7, -0.5, 0.5);
                     voice.panner.pan.rampTo(panValue, this.stabilityParams.transitionTime);
                 });
 
-                // Enhanced effects control
+                // Effects remain the same
                 const reverbWet = this.clamp(
                     0.2 + (speed * 0.15 * scaling.speedScale) + (spread * 0.1),
                     0.1,
@@ -567,6 +594,24 @@ export class AudioManager {
         if (this.lfo) {
             const lfoRate = 0.05 + norm * (2 - 0.05); // 0.05 to 2 Hz
             this.lfo.frequency.rampTo(lfoRate, 0.2);
+        }
+    }
+
+    // Add method to set root note and octave
+    setRootNoteAndOctave(note, octave) {
+        this.rootNote = note;
+        this.octave = octave;
+        
+        if (this.initialized) {
+            // Calculate new base frequencies
+            const baseFreq = this.noteFrequencies[note] * Math.pow(2, octave - 4);
+            const fifthFreq = baseFreq * 1.5; // Perfect fifth interval
+            
+            // Update voice frequencies
+            this.voices.forEach((voice, i) => {
+                const newFreq = i === 0 ? baseFreq : fifthFreq;
+                voice.osc.frequency.rampTo(newFreq, 0.3);
+            });
         }
     }
 } 

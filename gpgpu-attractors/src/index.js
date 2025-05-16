@@ -262,7 +262,7 @@ class AttractorSimulation {
         });
         
         // Parameter controls
-        const controls = ['sigma', 'rho', 'beta', 'numParticles', 'trailLength'];
+        const controls = ['sigma', 'rho', 'beta'];
         controls.forEach(param => {
             const slider = document.getElementById(param);
             const value = document.getElementById(`${param}Value`);
@@ -271,20 +271,32 @@ class AttractorSimulation {
                 const val = parseFloat(e.target.value);
                 value.textContent = val.toFixed(2);
                 
-                if (param === 'trailLength') {
-                    this.renderMaterial.uniforms.uTrailLength.value = val;
-                } else if (param === 'numParticles') {
-                    // Handle particle count change
-                    // This would require recreating the simulation
-                } else {
-                    const params = this.velUpdateMaterial.uniforms.uAttractorParams.value;
-                    switch(param) {
-                        case 'sigma': params.x = val; break;
-                        case 'rho': params.y = val; break;
-                        case 'beta': params.z = val; break;
-                    }
+                const params = this.velUpdateMaterial.uniforms.uAttractorParams.value;
+                switch(param) {
+                    case 'sigma': params.x = val; break;
+                    case 'rho': params.y = val; break;
+                    case 'beta': params.z = val; break;
                 }
             });
+        });
+
+        // Add root note and octave controls
+        const rootNoteSelect = document.getElementById('rootNote');
+        const octaveSlider = document.getElementById('octave');
+        const octaveValue = document.getElementById('octaveValue');
+
+        rootNoteSelect.addEventListener('change', (e) => {
+            if (this.audioManager) {
+                this.audioManager.setRootNoteAndOctave(e.target.value, parseInt(octaveSlider.value));
+            }
+        });
+
+        octaveSlider.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            octaveValue.textContent = val;
+            if (this.audioManager) {
+                this.audioManager.setRootNoteAndOctave(rootNoteSelect.value, val);
+            }
         });
 
         if (this.controls) {

@@ -1,124 +1,158 @@
-# GPGPU Attractors
+# GPGPU Attractors with Sonic Sonification
 
-A GPU-accelerated particle simulation of various attractor systems using Three.js and WebGL. This project demonstrates how to use GPGPU (General-Purpose computing on Graphics Processing Units) techniques to simulate complex dynamical systems efficiently.
+A real-time visualization and sonification of strange attractors using WebGL GPGPU techniques and Web Audio API. This project combines mathematical chaos with musical expression through a sophisticated audio synthesis system.
 
 ## Features
 
-- GPU-accelerated particle simulation
-- Multiple attractor types (Lorenz, Rossler, Thomas, Halvorsen, Dadras, Aizawa)
-- Real-time parameter adjustment
+- Real-time GPGPU-based particle simulation
+- Multiple attractor types (Lorenz, Thomas, Halvorsen, Dadras)
+- Interactive parameter controls
+- Musical sonification with root note and octave control
+- Camera-based audio modulation
+- Waveform visualization
+
+## Technical Overview
+
+### Visualization
+- Uses WebGL GPGPU techniques for efficient particle simulation
+- Real-time particle position and velocity updates
+- Smooth particle rendering with additive blending
 - Interactive camera controls
-- Particle trail effects
-- Performance optimized for large particle counts
-- **Advanced audio sonification engine using Tone.js**
-    - Per-voice gain structure
-    - Master gain and soft limiter to prevent clipping
-    - Parallel effects routing (reverb, delay)
-    - Real-time waveform visualization
-    - Attractor-driven sound mapping (frequency, timbre, panning, effects)
 
-## Getting Started
+### Sonification System
 
-### Prerequisites
+The audio system is built around a drone synth architecture that maps attractor behavior to musical parameters. Here's a detailed breakdown:
 
-- Node.js (v14 or higher)
-- npm or yarn
+#### 1. Core Synthesis
+- Two FM (Frequency Modulation) oscillators tuned to a perfect fifth interval
+- Base frequency determined by root note and octave selection
+- Sine wave oscillators for clean, pure tones
+- Modulation index and harmonicity for timbre control
 
-### Installation
-
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd gpgpu-attractors
+#### 2. Per-Voice Processing
+Each voice (oscillator) goes through:
 ```
-
-2. Install dependencies:
-```bash
-npm install
-# or
-yarn install
+FM Oscillator → Filter → Panner → Gain → Master Chain
 ```
+- **FM Oscillator**: 
+  - Frequency modulated by particle behavior
+  - Modulation index affects timbre richness
+  - Harmonicity set to 0.3 for subtle overtones
 
-3. Start the development server:
-```bash
-npm start
-# or
-yarn start
+- **Filter**:
+  - Lowpass filter with gentle resonance
+  - Frequency modulated by particle spread and position
+  - Q factor of 0.5 for smooth filtering
+
+- **Panner**:
+  - Stereo positioning based on particle movement
+  - Range: -0.5 (left) to 0.5 (right)
+  - Creates spatial movement in the sound
+
+- **Gain**:
+  - Individual volume control per voice
+  - Modulated by particle behavior
+  - Base level of 0.15 with dynamic modulation
+
+#### 3. Special Thomas Attractor Voice
+- Additional noise-based voice for the Thomas attractor
+- White noise → Bandpass filter → Gain chain
+- Filter frequency scaled by root note
+- Activity level based on particle dispersion
+
+#### 4. Effects Processing
+Parallel effects chain:
 ```
+Voice Outputs → Delay → Master Gain
+             → Reverb → Master Gain
+```
+- **Delay**:
+  - Feedback delay with dynamic timing
+  - Time and feedback modulated by particle movement
+  - Range: 0.1-0.5s delay time
 
-4. Open your browser and navigate to `http://localhost:5173`
+- **Reverb**:
+  - 4-second decay for spacious sound
+  - Wet level modulated by particle behavior
+  - Pre-delay of 0.1s for clarity
+
+#### 5. Master Processing
+```
+Effects → Master Gain → Limiter → Output
+```
+- Master gain at 0.8 for optimal level
+- Limiter at -6dB for protection
+
+#### 6. Parameter Mapping
+
+The system maps various attractor behaviors to audio parameters:
+
+- **Frequency Modulation**:
+  - Base frequency from root note and octave
+  - Modulated by particle speed and position
+  - Attractor-specific scaling factors
+
+- **Filter Modulation**:
+  - Frequency scaled by root note
+  - Modulated by particle spread and position
+  - Enhanced by rotation and dispersion
+
+- **Gain Modulation**:
+  - Base level of 0.15
+  - Modulated by particle symmetry and spread
+  - Enhanced by dispersion for Thomas attractor
+
+- **Panning Modulation**:
+  - Based on particle rotation
+  - Enhanced by dispersion for Thomas attractor
+
+#### 7. Camera Interaction
+The audio system responds to camera movement:
+- Distance affects reverb wetness and filter cutoff
+- Azimuth (horizontal rotation) affects panning
+- Elevation affects modulation index and harmonicity
+- Movement speed affects delay feedback
+
+#### 8. Stability Parameters
+The system maintains stability through:
+```javascript
+{
+    smoothingFactor: 0.8,    // Smooth parameter changes
+    minFrequency: 30,        // Prevent too low frequencies
+    maxFrequency: 1000,      // Prevent too high frequencies
+    minFilterFreq: 200,      // Minimum filter cutoff
+    maxFilterFreq: 2000,     // Maximum filter cutoff
+    minGain: 0.1,           // Minimum volume
+    maxGain: 0.25,          // Maximum volume
+    transitionTime: 0.3     // Smooth parameter transitions
+}
+```
 
 ## Usage
 
-- Use the UI controls to adjust simulation parameters:
-  - Attractor Type: Select different attractor systems
-  - σ (sigma): Controls the rate of mixing
-  - ρ (rho): Controls the system's behavior
-  - β (beta): Controls the dissipation
-  - Number of Particles: Adjust the simulation scale
-  - Trail Length: Control the particle trail effect
+1. Select an attractor type from the dropdown
+2. Adjust the attractor parameters (σ, ρ, β)
+3. Set the root note and octave for the sonification
+4. Use the camera controls to explore the visualization
+5. The audio will respond to both parameter changes and camera movement
 
-- Camera Controls:
-  - Left Mouse Button: Rotate
-  - Right Mouse Button: Pan
-  - Mouse Wheel: Zoom
+## Controls
 
-- **Audio Controls:**
-  - Start/Stop Audio: Use the UI buttons to enable or disable sonification
-  - Real-time waveform visualization is shown in the lower left
+- **Attractor Type**: Select different attractor systems
+- **σ (sigma)**: Controls the rate of particle movement
+- **ρ (rho)**: Controls the system's energy level
+- **β (beta)**: Controls the system's dissipation
+- **Root Note**: Sets the base frequency for the sonification
+- **Octave**: Adjusts the frequency range
+- **Reset**: Returns to default parameters
 
-## Technical Details
+## Technical Requirements
 
-The simulation uses a GPGPU approach with the following components:
+- WebGL 2.0 support
+- Web Audio API support
+- Modern web browser
 
-1. Position Update Shader: Updates particle positions based on velocities
-2. Velocity Update Shader: Calculates new velocities based on attractor equations
-3. Render Shader: Visualizes particles with trails and color effects
+## Credits
 
-The implementation uses:
-- Three.js for WebGL rendering
-- Data textures for particle state storage
-- Render targets for GPGPU computation
-- Shader-based particle updates
-- **Tone.js for real-time audio synthesis and effects**
+Interspecifics
 
-### Audio Engine Implementation (as of current version)
-- Each synth/voice has its own gain node for amplitude control
-- All voices and effects are routed through a master gain node
-- A master limiter (Tone.Volume) prevents digital clipping
-- Effects (reverb, delay) are routed in parallel and then summed at the master gain
-- Analyzer node provides real-time waveform visualization
-- Attractor features (spread, symmetry, density, etc.) are mapped to sound parameters (frequency, filter, modulation index, gain, panning, effects)
-- All parameter changes use `.rampTo()` for smooth transitions
-
-### Audio Processing Steps Under Test / Planned
-- **Parameter scaling and smoothing:**
-    - Use `Math.tanh` and exponential scaling to keep all mapped parameters in musically useful ranges
-    - Avoid direct `.value` assignments for fast-changing parameters
-- **Effects management:**
-    - Clamp reverb and delay parameters to safe, non-destructive ranges
-    - Ensure all effect transitions are smooth
-- **Output monitoring:**
-    - Use `Tone.Meter` to monitor output level and auto-adjust master gain if needed
-- **Voice management:**
-    - Detune and pan voices to avoid phase collapse and create a wide stereo image
-    - Limit the number of simultaneous voices for clarity
-- **Sample rate consistency:**
-    - Ensure all audio is generated or resampled at 44.1kHz or 48kHz
-
-## Performance Considerations
-
-- The simulation is optimized for GPU computation
-- Particle count can be adjusted based on hardware capabilities
-- Trail length affects memory usage and performance
-- Consider reducing particle count on lower-end devices
-- **Audio engine is designed for stability and clarity, but further tuning may be required for extreme attractor settings**
-
-## License
-
-
-## Acknowledgments
-
-- Three.js community for the excellent WebGL framework
-- Tone.js for real-time audio synthesis
-- Original attractor system research and equations 
