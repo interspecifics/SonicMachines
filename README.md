@@ -2,7 +2,7 @@
 
 SonicMachines is a collection of generative audiovisual systems developed by Interspecifics. These "machines" explore the poetic potential of mathematics, physics, and topology through real-time simulations, where dynamical systems become sources for sonic and visual material. They are not instruments in the traditional sense but procedural worlds—autonomous entities unfolding complexity over time through feedback, recursion, and geometric transformations.
 
-This project investigates how abstract mathematical systems—such as attractors, Euler tops, or scalar fields—can be rendered into experience through sound and visualization. Each Sonic Machine becomes a microcosm of motion, pattern, and rhythm that evolves continuously, suggesting an alternative approach to musical composition and computational aesthetics.
+This project investigates how abstract mathematical systems—such as attractors, particles to networks, or scalar fields—can be rendered into experience through sound and visualization. Each Sonic Machine becomes a microcosm of motion, pattern, and rhythm that evolves continuously, suggesting an alternative approach to musical composition and computational aesthetics.
 
 SonicMachines suggests that pure mathematics and physical systems are performative—they can behave, evolve, express. Rather than interpreting natural data, this project generates its own data-universes. These systems are both instruments and compositions, sculptures and behaviors, offering a speculative encounter with computation as a living form.
 
