@@ -20,21 +20,21 @@ All SonicMachines are:
 
 ⸻
 
-##Modules
+## Modules
 
-###Attractor Generator/
+### Attractor Generator/
 
 This module simulates various strange attractors using GPU acceleration. These systems exhibit chaotic but structured behaviors, such as those seen in Lorenz or Rössler systems. The particle movements create mesmerizing visuals that are mapped to sound synthesis or modulation parameters. You can think of it as a chaos-driven audiovisual oscillator.
 - Key concepts: Nonlinear dynamics, particle systems, strange attractors, GPGPU shaders.
 - Output: Audio-reactive flowfields and generative motion landscapes.
 
-###Physical Oscillators/
+### Physical Oscillators/
 
 This module implements the marching cubes algorithm to extract isosurfaces from 3D scalar fields. The resulting forms resemble living structures but emerge from mathematical fields rather than biology. The surfaces can be deformed in real-time and used to control sound textures or ambisonic space.
 - Key concepts: Volumetric data, topology, isosurface extraction, 3D spatial mappings.
 - Output: Shifting digital sculptures with sonic mappings based on field topology.
 
-###Euler Topology Synth/
+### Euler Topology Synth/
 
 Inspired by the rigid-body mechanics of generated network, this module simulates spinning body dynamics and projects their motion into spatial trajectories that control sound and visuals. The feedback between rotational vectors and oscillation patterns creates a geometric choreography of forces.
 - Key concepts: Classical mechanics, angular momentum, quaternions, rotation, precession.
@@ -42,7 +42,7 @@ Inspired by the rigid-body mechanics of generated network, this module simulates
 
 ⸻
 
-##Technologies Used
+## Technologies Used
 - JavaScript — Core environment for the interactive simulations.
 - GLSL — Used for custom shaders and GPU-accelerated computation.
 - WebGL — For real-time 3D rendering.
