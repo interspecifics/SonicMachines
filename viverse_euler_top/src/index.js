@@ -1,6 +1,69 @@
 import * as pc from 'playcanvas';
 import GUI from 'lil-gui';
 import * as Tone from 'tone';
+import { AudioManager } from './AudioManager';
+
+// --- Waveform Visualization Canvas ---
+const waveformCanvas = document.createElement('canvas');
+waveformCanvas.width = 320;
+waveformCanvas.height = 80;
+waveformCanvas.style.position = 'fixed';
+waveformCanvas.style.left = '30px';
+waveformCanvas.style.bottom = '340px'; // higher above stats panel
+waveformCanvas.style.background = 'transparent'; // no background
+waveformCanvas.style.border = 'none'; // no border
+waveformCanvas.style.zIndex = 2000;
+waveformCanvas.style.width = '320px';
+waveformCanvas.style.height = '80px';
+waveformCanvas.style.boxSizing = 'content-box';
+document.body.appendChild(waveformCanvas);
+
+// --- Blend Visualization Canvas (Vector) ---
+const blendCanvas = document.createElement('canvas');
+blendCanvas.width = 120;
+blendCanvas.height = 120;
+blendCanvas.style.position = 'fixed';
+blendCanvas.style.right = '20px';
+blendCanvas.style.bottom = '100px'; // above audio controls
+blendCanvas.style.background = '#222';
+blendCanvas.style.border = '1px solid #888';
+blendCanvas.style.zIndex = 2000;
+blendCanvas.style.width = '120px';   // Prevent CSS stretching
+blendCanvas.style.height = '120px';  // Prevent CSS stretching
+blendCanvas.style.boxSizing = 'content-box'; // Prevent border from affecting size
+document.body.appendChild(blendCanvas);
+
+function updateBlendViz(v1, v2, v3, v4) {
+    const ctx = blendCanvas.getContext('2d');
+    ctx.clearRect(0, 0, blendCanvas.width, blendCanvas.height);
+    // Map v1-v4 to 2D (X = v1, Y = v3)
+    const x = v1 * blendCanvas.width;
+    const y = (1 - v3) * blendCanvas.height;
+    // Draw background grid
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(blendCanvas.width/2, 0);
+    ctx.lineTo(blendCanvas.width/2, blendCanvas.height);
+    ctx.moveTo(0, blendCanvas.height/2);
+    ctx.lineTo(blendCanvas.width, blendCanvas.height/2);
+    ctx.stroke();
+    // Draw the dot
+    ctx.beginPath();
+    ctx.arc(x, y, 10, 0, 2 * Math.PI);
+    ctx.fillStyle = '#4CAF50';
+    ctx.shadowColor = '#4CAF50';
+    ctx.shadowBlur = 10;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    // Label corners with synth names
+    ctx.fillStyle = '#aaa';
+    ctx.font = '10px monospace';
+    ctx.fillText('FM', 5, 15);
+    ctx.fillText('AM', blendCanvas.width-25, 15);
+    ctx.fillText('MEM', 5, blendCanvas.height-5);
+    ctx.fillText('DUO', blendCanvas.width-30, blendCanvas.height-5);
+}
 
 // Create canvas
 const canvas = document.getElementById('app');
@@ -41,6 +104,20 @@ let previousTriangles = new Set();
 // Mesh instances
 let pointMesh, pointMeshInstance;
 let lineMesh, lineMeshInstance;
+
+// Declare audioManager and previousTriangleAreas at the top
+let audioManager = new AudioManager();
+const previousTriangleAreas = {};
+let analyser;
+
+// Smoothing factor for network-to-audio mapping
+const SMOOTHING_FACTOR = 0.2; // 0.0 = no smoothing, 1.0 = instant
+let smoothedNetworkState = null;
+
+// Add after the other state variables
+let previousParticleCount = 0;
+const AUDIO_TRANSITION_SMOOTHING = 0.05; // Much slower smoothing for audio transitions
+let audioTransitionState = null;
 
 // Create the app
 const app = new pc.Application(canvas, {
@@ -330,7 +407,7 @@ function findTriangles() {
             particleConnections.set(i, connections);
         }
         // Debug: log number of connections for this particle
-        console.log(`Particle ${i} has ${connections.size} connections`);
+        // console.log(`Particle ${i} has ${connections.size} connections`);
     }
     // Second pass: find triangles only between connected particles
     let trianglesConsidered = 0;
@@ -376,7 +453,7 @@ function findTriangles() {
         }
     }
     // Debug: log triangle stats
-    console.log(`findTriangles: considered=${trianglesConsidered}, skippedArea=${trianglesSkippedArea}, skippedConnection=${trianglesSkippedConnection}, found=${triangles.size}`);
+    // console.log(`findTriangles: considered=${trianglesConsidered}, skippedArea=${trianglesSkippedArea}, skippedConnection=${trianglesSkippedConnection}, found=${triangles.size}`);
     return triangles;
 }
 
@@ -451,115 +528,52 @@ debugPanel.style.textShadow = '1px 1px 1px rgba(0,0,0,0.5)';
 document.body.appendChild(debugPanel);
 
 // === Tone.js Sonification Integration ===
-// 1. Add Start Audio button
-const startAudioBtn = document.createElement('button');
-startAudioBtn.textContent = 'Start Audio';
-startAudioBtn.style.position = 'fixed';
-startAudioBtn.style.bottom = '20px';
-startAudioBtn.style.right = '20px';
-startAudioBtn.style.zIndex = 10001;
-startAudioBtn.style.padding = '12px 24px';
-startAudioBtn.style.fontSize = '18px';
-startAudioBtn.style.background = '#222';
-startAudioBtn.style.color = '#fff';
-startAudioBtn.style.border = 'none';
-startAudioBtn.style.borderRadius = '8px';
-startAudioBtn.style.cursor = 'pointer';
-document.body.appendChild(startAudioBtn);
+// 1. Add audio controls container
+const audioControls = document.createElement('div');
+audioControls.style.position = 'fixed';
+audioControls.style.bottom = '20px';
+audioControls.style.right = '20px';
+audioControls.style.background = 'rgba(0,0,0,0.7)';
+audioControls.style.padding = '10px';
+audioControls.style.borderRadius = '5px';
+audioControls.style.zIndex = '1000';
+audioControls.style.color = 'white';
+audioControls.style.fontFamily = 'monospace';
+audioControls.style.display = 'flex';
+audioControls.style.gap = '10px';
+document.body.appendChild(audioControls);
 
-// 2. Global Tone.js synth, effects, gain, limiter, analyser
-let synth;
-let analyser;
-let reverb;
-let delay;
-let chorus;
-let phaser;
-let autoFilter;
-let audioStarted = false;
+// 2. Add Start Audio button
+const startButton = document.createElement('button');
+startButton.textContent = 'Start Audio';
+startButton.style.padding = '5px 10px';
+startButton.style.backgroundColor = '#4CAF50';
+startButton.style.border = 'none';
+startButton.style.borderRadius = '3px';
+startButton.style.cursor = 'pointer';
+startButton.style.fontFamily = 'monospace';
+startButton.style.color = 'white';
+audioControls.appendChild(startButton);
 
-// 3. Add waveform visualization canvas
-const waveformCanvas = document.createElement('canvas');
-waveformCanvas.width = 330;
-waveformCanvas.height = 120;
-waveformCanvas.style.width = '330px';
-waveformCanvas.style.height = '120px';
-waveformCanvas.style.position = 'fixed';
-waveformCanvas.style.left = '20px';
-waveformCanvas.style.bottom = '100px';
-waveformCanvas.style.transform = '';
-waveformCanvas.style.background = 'transparent';
-waveformCanvas.style.borderRadius = '8px';
-waveformCanvas.style.zIndex = 10001;
-waveformCanvas.style.right = '';
-document.body.appendChild(waveformCanvas);
-const ctx = waveformCanvas.getContext('2d');
+// 3. Add Stop Audio button
+const stopButton = document.createElement('button');
+stopButton.textContent = 'Stop Audio';
+stopButton.style.padding = '5px 10px';
+stopButton.style.backgroundColor = '#f44336';
+stopButton.style.border = 'none';
+stopButton.style.borderRadius = '3px';
+stopButton.style.cursor = 'pointer';
+stopButton.style.fontFamily = 'monospace';
+stopButton.style.color = 'white';
+audioControls.appendChild(stopButton);
 
-function drawWaveform() {
-    if (!analyser) {
-        ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
-        requestAnimationFrame(drawWaveform);
-        return;
-    }
-    const waveform = analyser.getValue();
-    ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
-
-    // Draw center line
-    ctx.beginPath();
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-    ctx.lineWidth = 1;
-    ctx.moveTo(0, waveformCanvas.height / 2);
-    ctx.lineTo(waveformCanvas.width, waveformCanvas.height / 2);
-    ctx.stroke();
-
-    // Draw waveform
-    ctx.beginPath();
-    ctx.strokeStyle = '#fff';
-    ctx.lineWidth = 2;
-    for (let i = 0; i < waveform.length; i++) {
-        const x = (i / waveform.length) * waveformCanvas.width;
-        const y = ((waveform[i] + 1) / 2) * waveformCanvas.height;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-
-    // Add subtle gradient fill
-    const gradient = ctx.createLinearGradient(0, 0, 0, waveformCanvas.height);
-    gradient.addColorStop(0, 'rgba(0,255,255,0.1)');
-    gradient.addColorStop(1, 'rgba(0,255,255,0)');
-    ctx.fillStyle = gradient;
-    ctx.lineTo(waveformCanvas.width, waveformCanvas.height);
-    ctx.lineTo(0, waveformCanvas.height);
-    ctx.closePath();
-    ctx.fill();
-
-    requestAnimationFrame(drawWaveform);
-}
-
-async function setupAudio() {
-    if (audioStarted) return;
-    await Tone.start();
-    console.log('Tone.context.state:', Tone.context.state);
-    // Create synth
-    synth = new Tone.PolySynth(Tone.Synth);
-    // Create effects
-    reverb = new Tone.Reverb({ decay: 6, wet: 0.5 }).toDestination();
-    delay = new Tone.FeedbackDelay("8n", 0.4);
-    chorus = new Tone.Chorus(1.5, 2.5, 0.4).start();
-    phaser = new Tone.Phaser({ frequency: 0.5, octaves: 3, baseFrequency: 400 });
-    autoFilter = new Tone.AutoFilter("4n").start();
-    // Connect chain
-    synth.chain(autoFilter, phaser, chorus, delay, reverb);
-    analyser = new Tone.Analyser('waveform', 256);
-    reverb.connect(analyser);
-    analyser.toDestination();
-    Tone.Destination.volume.value = -12;
-    drawWaveform();
-    audioStarted = true;
-    startAudioBtn.style.display = 'none';
-}
-
-startAudioBtn.addEventListener('click', setupAudio);
+// 4. Add audio status indicator
+const audioStatus = document.createElement('div');
+audioStatus.style.padding = '5px 10px';
+audioStatus.style.backgroundColor = '#666';
+audioStatus.style.borderRadius = '3px';
+audioStatus.textContent = 'Audio: Stopped';
+audioControls.appendChild(audioStatus);
 
 // GUI setup
 const gui = new GUI();
@@ -574,8 +588,22 @@ const params = {
     rotationSpeed: 0.3,    // Add rotation speed control
     rootMidi: 60,          // MIDI note number for root (C4)
     maxTriangles: 1000,    // Max triangles for network analysis
-    speed: 1.0             // General speed multiplier
+    speed: 1.0,            // General speed multiplier
+    scale: 'Major',        // Musical scale
+    mode: 'Ionian',        // Musical mode (default to Ionian for Major)
+    microtuning: '12-TET',  // Microtuning system
+    networkRoot: false,    // Network modulates root
+    scaleIndex: 0,          // Added for scale selection
+    microtuningIndex: 0,     // Added for microtuning selection
+    currentScaleLabel: '',  // Added for current scale label
+    currentMicrotuningLabel: '',  // Added for current microtuning label
+    volume: 0.16,           // Default volume (linear, about -16 dB)
+    octave: 4,              // Default octave
 };
+
+// Define options for scales and microtuning
+const scaleOptions = ['Major', 'Minor', 'Dorian', 'Phrygian', 'Lydian', 'Mixolydian', 'Locrian'];
+const microtuningOptions = ['12-TET', '19-TET', '24-TET', 'Just Intonation'];
 
 // Add all GUI controls
 gui.add(params, 'showDots').onChange(value => {
@@ -636,6 +664,59 @@ gui.add(params, 'rotationSpeed', 0.1, 1.0).onChange(value => {
 // Add root MIDI control
 gui.add(params, 'rootMidi', 24, 83, 1).name('Root MIDI (C1-B5)');
 
+// Add scale, mode, microtuning, and network root controls to GUI
+const musicFolder = gui.addFolder('Musical Controls');
+musicFolder.add(params, 'scaleIndex', 0, scaleOptions.length - 1, 1)
+    .name('Scale')
+    .onChange(idx => {
+        params.scale = scaleOptions[idx];
+        params.currentScaleLabel = scaleOptions[idx];
+        if (audioManager) audioManager.setScale(params.scale);
+        musicFolder.controllersRecursive().forEach(ctrl => ctrl.updateDisplay && ctrl.updateDisplay());
+    });
+musicFolder.add(params, 'currentScaleLabel').name('Current Scale').listen();
+musicFolder.add(params, 'microtuningIndex', 0, microtuningOptions.length - 1, 1)
+    .name('Microtuning')
+    .onChange(idx => {
+        params.microtuning = microtuningOptions[idx];
+        params.currentMicrotuningLabel = microtuningOptions[idx];
+        if (audioManager) audioManager.setMicrotuning(params.microtuning);
+        musicFolder.controllersRecursive().forEach(ctrl => ctrl.updateDisplay && ctrl.updateDisplay());
+    });
+musicFolder.add(params, 'currentMicrotuningLabel').name('Current Microtuning').listen();
+musicFolder.add(params, 'networkRoot').name('Network modulates root')
+    .onChange(value => { if (audioManager) audioManager.setNetworkRootModulation(value); });
+
+// Add volume control
+musicFolder.add(params, 'volume', 0, 0.707, 0.01) // 0.707 linear is -3 dB
+    .name('Volume (-3 dB max)')
+    .onChange(value => {
+        if (audioManager && audioManager.masterGain) {
+            audioManager.masterGain.gain.value = value;
+        }
+    });
+
+// Add octave control
+musicFolder.add(params, 'octave', 1, 7, 1)
+    .name('Octave')
+    .onChange(value => {
+        params.octave = value;
+        // Update root note and octave in AudioManager
+        if (audioManager) {
+            // Use the current root note name
+            let note = 'C';
+            if (params.scale && typeof params.scale === 'string') {
+                note = params.scale[0].toUpperCase();
+            }
+            // Try to use the note from rootMidi if available
+            if (typeof params.rootMidi === 'number') {
+                const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+                note = noteNames[params.rootMidi % 12];
+            }
+            audioManager.setRootNoteAndOctave(note, value);
+        }
+    });
+
 // Handle window resize
 window.addEventListener('resize', () => {
     app.resizeCanvas();
@@ -682,7 +763,7 @@ app.once('start', () => {
     titleElement.style.whiteSpace = 'pre';
     titleElement.innerHTML = `INTERSPECIFICS
 SONIC MACHINES /
-EULER TONNETZ \\_`;
+EULER TOPOLOYCAL SYNTH_`;
     document.body.appendChild(titleElement);
     
     // Force initial particle positions update
@@ -767,10 +848,7 @@ window.addEventListener('focus', () => {
     }
 });
 
-// Track previous triangle areas for novelty prioritization
-const previousTriangleAreas = {};
-
-// Modify the update function to include frame counting and throttling
+// Modify the update function to include audio transition smoothing and blend viz update
 function update() {
     const currentTime = performance.now();
     dt = (currentTime - lastTime) / 1000;
@@ -787,6 +865,38 @@ function update() {
         connectionDensity: calculateConnectionDensity(),
         spatialCoherence: calculateSpatialCoherence()
     };
+
+    // --- Parameter smoothing ---
+    if (!smoothedNetworkState) {
+        smoothedNetworkState = { ...networkState };
+    } else {
+        for (let key in networkState) {
+            smoothedNetworkState[key] = smoothedNetworkState[key] * (1 - SMOOTHING_FACTOR) + networkState[key] * SMOOTHING_FACTOR;
+        }
+    }
+
+    // --- Audio transition smoothing ---
+    // Check if particle count has changed
+    if (previousParticleCount !== particleCount) {
+        // Initialize audio transition state if needed
+        if (!audioTransitionState) {
+            audioTransitionState = { ...smoothedNetworkState };
+        }
+        
+        // Apply slower smoothing to audio parameters during transitions
+        for (let key in smoothedNetworkState) {
+            audioTransitionState[key] = audioTransitionState[key] * (1 - AUDIO_TRANSITION_SMOOTHING) + 
+                                      smoothedNetworkState[key] * AUDIO_TRANSITION_SMOOTHING;
+        }
+        
+        // Update previous count
+        previousParticleCount = particleCount;
+    } else if (audioTransitionState) {
+        // If no change in particle count, gradually sync audio state with network state
+        for (let key in smoothedNetworkState) {
+            audioTransitionState[key] = smoothedNetworkState[key];
+        }
+    }
 
     // Reset connections
     for (let i = 0; i < particleCount; i++) {
@@ -897,9 +1007,28 @@ function update() {
         }
     }
 
+    // Use audioTransitionState for audio updates instead of smoothedNetworkState
+    if (audioManager) {
+        audioManager.updateFromNetwork(audioTransitionState || smoothedNetworkState);
+        // --- Blend Viz ---
+        // Calculate v1-v4 as in AudioManager
+        const ns = audioTransitionState || smoothedNetworkState;
+        const v1 = Math.max(0, Math.min(1, ns.triangleDensity));
+        const v2 = Math.max(0, Math.min(1, ns.averageArea / 1000));
+        const v3 = Math.max(0, Math.min(1, ns.networkComplexity));
+        const v4 = Math.max(0, Math.min(1, ns.spatialDistribution));
+        updateBlendViz(v1, v2, v3, v4);
+    }
+
+    // Update previous triangles set
+    previousTriangles = new Set(currentTriangles);
+
     if (frameCounter > 1000000) frameCounter = 0;
     group.setEulerAngles(0, currentTime * 0.05 * params.speed, 0);
-    updateDebugInfo(networkState);
+    updateDebugInfo(audioTransitionState || smoothedNetworkState);
+
+    // --- Waveform Drawing Function ---
+    drawWaveform();
 }
 
 // Update the debug info function to include network state
@@ -979,10 +1108,16 @@ function noteToMidi(note, octave) {
 }
 
 // Map triangle indices to Tonnetz coordinates (simple version)
-function triangleToTonnetz(triangleId) {
-    // Use the three indices as (i, j, k) offsets from the root
-    // This is a simple mapping; you can refine it for your network
-    const parts = triangleId.split('-').map(Number);
+function triangleToTonnetz(triangle) {
+    // Accepts either a triangle object or a string id
+    let parts;
+    if (typeof triangle === 'string') {
+        parts = triangle.split('-').map(Number);
+    } else if (triangle && triangle.particles) {
+        parts = triangle.particles;
+    } else {
+        throw new Error('Invalid triangle input to triangleToTonnetz');
+    }
     // Center the mapping around 0
     const i = parts[0] % 3 - 1;
     const j = parts[1] % 3 - 1;
@@ -1007,117 +1142,147 @@ function calculateTriangleDensity() {
 
 function calculateAverageTriangleArea() {
     if (currentTriangles.size === 0) return 0;
+    
     let totalArea = 0;
-    currentTriangles.forEach(triangle => {
+    for (const triangle of currentTriangles) {
         totalArea += triangle.area;
-    });
+    }
     return totalArea / currentTriangles.size;
 }
 
 function calculateNetworkComplexity() {
-    let totalConnections = 0;
-    let maxPossibleConnections = particleCount * (particleCount - 1) / 2;
+    // Combine multiple factors for complexity
+    const triangleDensity = calculateTriangleDensity();
+    const avgArea = calculateAverageTriangleArea();
+    const spatialDist = calculateSpatialDistribution();
+    const velocity = calculateAverageParticleVelocity();
     
-    for (let i = 0; i < particleCount; i++) {
-        if (particles[i]) {
-            totalConnections += particles[i].connections;
-        }
-    }
-    
-    return totalConnections / maxPossibleConnections;
+    // Weighted combination of factors
+    return (
+        triangleDensity * 0.3 +
+        (1 - Math.min(avgArea / 1000, 1)) * 0.2 +
+        spatialDist * 0.3 +
+        velocity * 0.2
+    );
 }
 
 function calculateSpatialDistribution() {
     if (currentTriangles.size === 0) return 0;
     
-    let centerOfMass = new pc.Vec3();
-    let totalArea = 0;
+    // Calculate center of mass
+    let centerX = 0, centerY = 0, centerZ = 0;
+    for (const triangle of currentTriangles) {
+        const center = triangle.center;
+        centerX += center.x;
+        centerY += center.y;
+        centerZ += center.z;
+    }
+    centerX /= currentTriangles.size;
+    centerY /= currentTriangles.size;
+    centerZ /= currentTriangles.size;
     
-    currentTriangles.forEach(triangle => {
-        centerOfMass.add(triangle.center.scale(triangle.area));
-        totalArea += triangle.area;
-    });
+    // Calculate average distance from center
+    let totalDist = 0;
+    for (const triangle of currentTriangles) {
+        const center = triangle.center;
+        const dx = center.x - centerX;
+        const dy = center.y - centerY;
+        const dz = center.z - centerZ;
+        totalDist += Math.sqrt(dx * dx + dy * dy + dz * dz);
+    }
     
-    centerOfMass.scale(1 / totalArea);
-    
-    let spatialSpread = 0;
-    currentTriangles.forEach(triangle => {
-        const distance = triangle.center.distance(centerOfMass);
-        spatialSpread += distance * triangle.area;
-    });
-    
-    return spatialSpread / totalArea;
+    return totalDist / (currentTriangles.size * r);
 }
 
 function calculateAverageParticleVelocity() {
     let totalVelocity = 0;
-    let activeParticles = 0;
+    let count = 0;
     
     for (let i = 0; i < particleCount; i++) {
-        if (particles[i]) {
-            const velocity = Math.sqrt(
-                particles[i].vel.x * particles[i].vel.x +
-                particles[i].vel.y * particles[i].vel.y +
-                particles[i].vel.z * particles[i].vel.z
+        const p = particles[i];
+        if (p.vel) {
+            const speed = Math.sqrt(
+                p.vel.x * p.vel.x +
+                p.vel.y * p.vel.y +
+                p.vel.z * p.vel.z
             );
-            totalVelocity += velocity;
-            activeParticles++;
+            totalVelocity += speed;
+            count++;
         }
     }
     
-    return activeParticles > 0 ? totalVelocity / activeParticles : 0;
+    return count > 0 ? totalVelocity / count : 0;
 }
 
 function calculateConnectionDensity() {
-    const lineCount = lineMesh ? lineMesh.primitive[0].count / 2 : 0;
+    let totalConnections = 0;
+    for (const connections of particleConnections.values()) {
+        totalConnections += connections.size;
+    }
+    
     const maxPossibleConnections = particleCount * (particleCount - 1) / 2;
-    return lineCount / maxPossibleConnections;
+    return totalConnections / maxPossibleConnections;
 }
 
 function calculateSpatialCoherence() {
-    if (particleCount < 2) return 0;
+    if (currentTriangles.size === 0) return 0;
     
-    let totalVelocityAlignment = 0;
-    let totalConnections = 0;
-    
-    for (let i = 0; i < particleCount; i++) {
-        if (!particles[i]) continue;
+    // Calculate average normal vector
+    let avgNormalX = 0, avgNormalY = 0, avgNormalZ = 0;
+    for (const triangle of currentTriangles) {
+        const [p1, p2, p3] = triangle.particles;
+        const v1 = {
+            x: particles[p2].pos.x - particles[p1].pos.x,
+            y: particles[p2].pos.y - particles[p1].pos.y,
+            z: particles[p2].pos.z - particles[p1].pos.z
+        };
+        const v2 = {
+            x: particles[p3].pos.x - particles[p1].pos.x,
+            y: particles[p3].pos.y - particles[p1].pos.y,
+            z: particles[p3].pos.z - particles[p1].pos.z
+        };
         
-        for (let j = i + 1; j < particleCount; j++) {
-            if (!particles[j]) continue;
-            
-            const dx = positions[i * 3] - positions[j * 3];
-            const dy = positions[i * 3 + 1] - positions[j * 3 + 1];
-            const dz = positions[i * 3 + 2] - positions[j * 3 + 2];
-            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            
-            if (dist < minDistance) {
-                const dotProduct = 
-                    particles[i].vel.x * particles[j].vel.x +
-                    particles[i].vel.y * particles[j].vel.y +
-                    particles[i].vel.z * particles[j].vel.z;
-                
-                const vel1 = Math.sqrt(
-                    particles[i].vel.x * particles[i].vel.x +
-                    particles[i].vel.y * particles[i].vel.y +
-                    particles[i].vel.z * particles[i].vel.z
-                );
-                
-                const vel2 = Math.sqrt(
-                    particles[j].vel.x * particles[j].vel.x +
-                    particles[j].vel.y * particles[j].vel.y +
-                    particles[j].vel.z * particles[j].vel.z
-                );
-                
-                if (vel1 > 0 && vel2 > 0) {
-                    totalVelocityAlignment += dotProduct / (vel1 * vel2);
-                    totalConnections++;
-                }
-            }
+        // Cross product for normal
+        const nx = v1.y * v2.z - v1.z * v2.y;
+        const ny = v1.z * v2.x - v1.x * v2.z;
+        const nz = v1.x * v2.y - v1.y * v2.x;
+        
+        // Normalize
+        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+        if (len > 0) {
+            avgNormalX += nx / len;
+            avgNormalY += ny / len;
+            avgNormalZ += nz / len;
         }
     }
     
-    return totalConnections > 0 ? totalVelocityAlignment / totalConnections : 0;
+    // Normalize average normal
+    const len = Math.sqrt(
+        avgNormalX * avgNormalX +
+        avgNormalY * avgNormalY +
+        avgNormalZ * avgNormalZ
+    );
+    
+    if (len > 0) {
+        avgNormalX /= len;
+        avgNormalY /= len;
+        avgNormalZ /= len;
+    }
+    
+    // Calculate coherence as dot product with camera direction
+    const cameraDir = {
+        x: camera.getPosition().x,
+        y: camera.getPosition().y,
+        z: camera.getPosition().z
+    };
+    
+    const dot = (
+        avgNormalX * cameraDir.x +
+        avgNormalY * cameraDir.y +
+        avgNormalZ * cameraDir.z
+    );
+    
+    return (dot + 1) / 2; // Normalize to 0-1
 }
 
 // Drone Modulation Mapping Functions
@@ -1192,4 +1357,48 @@ function mapParticleVelocityToDelay(velocity) {
 function mapConnectionDensityToFeedback(density) {
     // Map density (0-1) to delay feedback (0-0.9)
     return density * 0.9;
+}
+
+// In your UI setup, only call audioManager.start() from the Start Audio button click handler
+startButton.addEventListener('click', async () => {
+    try {
+        await audioManager.start();
+        startButton.textContent = 'Audio Running';
+        startButton.style.backgroundColor = '#45a049';
+        audioStatus.textContent = 'Audio: Running';
+        audioStatus.style.backgroundColor = '#4CAF50';
+        // Let AudioManager handle waveform animation after audio is started
+    } catch (error) {
+        console.error('Failed to start audio:', error);
+        startButton.textContent = 'Start Failed';
+        startButton.style.backgroundColor = '#f44336';
+        audioStatus.textContent = 'Audio: Failed';
+        audioStatus.style.backgroundColor = '#f44336';
+    }
+});
+
+stopButton.addEventListener('click', () => {
+    audioManager.stop();
+    startButton.textContent = 'Start Audio';
+    startButton.style.backgroundColor = '#4CAF50';
+    audioStatus.textContent = 'Audio: Stopped';
+    audioStatus.style.backgroundColor = '#666';
+});
+
+// --- Waveform Drawing Function ---
+function drawWaveform() {
+    if (!audioManager || !audioManager.analyser) return;
+    const ctx = waveformCanvas.getContext('2d');
+    ctx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+    const data = audioManager.analyser.getValue();
+    ctx.beginPath();
+    ctx.moveTo(0, waveformCanvas.height / 2);
+    for (let i = 0; i < data.length; i++) {
+        const x = (i / data.length) * waveformCanvas.width;
+        const y = (1 - (data[i] + 1) / 2) * waveformCanvas.height;
+        ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = 'rgba(128,192,255,0.7)'; // match network color
+    ctx.lineWidth = 2;
+    ctx.stroke();
 } 
