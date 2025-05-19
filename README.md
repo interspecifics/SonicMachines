@@ -24,7 +24,7 @@ All SonicMachines are:
 
 ### Attractor Generator/
 
-![Attractor Generator](https://github.com/interspecifics/SonicMachines/blob/main/attractor_s.png)
+![Attractor Generator](https://raw.githubusercontent.com/interspecifics/SonicMachines/main/attractor_s.png)
 
 This module simulates various strange attractors using GPU acceleration. These systems exhibit chaotic but structured behaviors, such as those seen in Lorenz or Rössler systems. The particle movements create mesmerizing visuals that are mapped to sound synthesis or modulation parameters. You can think of it as a chaos-driven audiovisual oscillator.
 - Key concepts: Nonlinear dynamics, particle systems, strange attractors, GPGPU shaders.
@@ -32,7 +32,7 @@ This module simulates various strange attractors using GPU acceleration. These s
 
 ### Euler Topology Synth/
 
-![Euler Topology Synth](https://github.com/interspecifics/SonicMachines/blob/main/euler_s.png)
+![Euler Topology Synth](https://raw.githubusercontent.com/interspecifics/SonicMachines/main/euler_s.png)
 
 Inspired by the rigid-body mechanics of generated network, this module simulates spinning body dynamics and projects their motion into spatial trajectories that control sound and visuals. The feedback between rotational vectors and oscillation patterns creates a geometric choreography of forces.
 - Key concepts: Classical mechanics, angular momentum, quaternions, rotation, precession.
@@ -40,7 +40,7 @@ Inspired by the rigid-body mechanics of generated network, this module simulates
 
 ### Physical Oscillators/
 
-![Physical Oscillators](https://github.com/interspecifics/SonicMachines/blob/main/oscillator_s.png)
+![Physical Oscillators](https://raw.githubusercontent.com/interspecifics/SonicMachines/main/oscillator_s.png)
 
 This module implements the marching cubes algorithm to extract isosurfaces from 3D scalar fields. The resulting forms resemble living structures but emerge from mathematical fields rather than biology. The surfaces can be deformed in real-time and used to control sound textures or ambisonic space.
 - Key concepts: Volumetric data, topology, isosurface extraction, 3D spatial mappings.
